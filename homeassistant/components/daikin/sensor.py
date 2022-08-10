@@ -164,6 +164,16 @@ async def async_setup_entry(
         for description in SENSOR_TYPES
         if description.key in sensors
     ]
+
+    if zones := daikin_api.device.zones:
+        entities.extend(
+            [
+                DaikinZoneSetTempSensor(daikin_api, zone_id)
+                for zone_id, zone in enumerate(zones)
+                if zone != ("-", "0")
+            ]
+        )
+
     async_add_entities(entities)
 
 
@@ -198,3 +208,41 @@ class DaikinSensor(SensorEntity):
     def device_info(self):
         """Return a device description for device registry."""
         return self._api.device_info
+
+
+class DaikinZoneSetTempSensor(SensorEntity):
+    """Representation of a zone Set|Target temp sensor value."""
+
+    def __init__(self, daikin_api, zone_id):
+        """Initialize the zone."""
+        self._api = daikin_api
+        self._zone_id = zone_id
+        self._attr_name = f"{self._api.name} {self._api.device.zones[self._zone_id][0]} Set Temperature"
+
+        self.entity_description = DaikinSensorEntityDescription(
+            key=f"zone{zone_id}_set_temperature",
+            name=f"Zone {zone_id} Set Temperature",
+            device_class=SensorDeviceClass.TEMPERATURE,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=TEMP_CELSIUS,
+            value_func=None
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID."""
+        return f"{self._api.device.mac}-zone{self._zone_id}-stemp"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the state of the sensor."""
+        return self._api.device.zones[self._zone_id][2]
+
+    @property
+    def device_info(self):
+        """Return a device description for device registry."""
+        return self._api.device_info
+
+    async def async_update(self):
+        """Retrieve latest state."""
+        await self._api.async_update()
